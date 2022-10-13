@@ -14,11 +14,11 @@ meta:
 
 # VOSK STT - Speech to Text
 
-This plugin allows Naomi to use VOSK for Speech to Text. This module does not
+This plugin allows [Naomi](https://projectnaomi.com/) to use [VOSK](https://alphacephei.com/vosk/)  to convert speech to text. This module does not
 currently do language model adaptation, so it is not yet suitable for special
 applications or custom words, but it is already very good, at least in English.
 
-If anyone is interested in helping me adapt the language model and/or acoustic
+If anyone is interested in helping me adapt the language and/or acoustic
 model, the instructions are at https://alphacephei.com/vosk/adaptation
 
 To activate this plugin, change your profile.yml file to set the active and/or
