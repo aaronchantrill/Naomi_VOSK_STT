@@ -4,7 +4,7 @@ label: VOSK STT
 title: VOSK STT - Speech to Text
 type: stts
 description: "Allows Naomi to use VOSK for active listening"
-source: https://github.com/aaronchantrill/Naomi_VOSK_STT.gitblob/master/readme.md
+source: https://github.com/aaronchantrill/Naomi_VOSK_STT/blob/main/README.md
 meta:
   - property: og:title
     content: "VOSK STT - Speech to Text"
