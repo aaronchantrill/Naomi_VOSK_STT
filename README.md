@@ -1,5 +1,5 @@
 ---
-id: pocketsphinx_kws
+id: VOSK_STT
 label: VOSK STT
 title: VOSK STT - Speech to Text
 type: stts
