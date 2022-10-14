@@ -66,6 +66,7 @@ class VoskSTTPlugin(plugin.STTPlugin):
                 'vosk-model-small-en-us-0.15'
             )
         )
+        os.makedirs(paths.sub('vosk'))
         if not os.path.isdir(vosk_model):
             # since the model does not exist, download the default to the
             # standard path and unzip it
