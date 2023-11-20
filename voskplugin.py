@@ -3,6 +3,7 @@ import json
 import os.path
 import sys
 from collections import OrderedDict
+from naomi import app_utils
 from naomi import paths
 from naomi import plugin
 from naomi import profile
@@ -59,28 +60,30 @@ class VoskSTTPlugin(plugin.STTPlugin):
 
 
     def settings(self):
+        default_model='vosk-model-small-en-us-0.15'
         vosk_model = profile.get(
             ['VOSK STT', 'model'],
             os.path.join(
                 paths.sub('vosk'),
-                'vosk-model-small-en-us-0.15'
+                default_model
             )
         )
-        if not os.path.isdir(paths.sub('vosk')):
-            os.makedirs(paths.sub('vosk'))
+        default_model=os.path.basename(vosk_model)
+        if not os.path.isdir(os.path.dirname(vosk_model)):
+            os.makedirs(os.path.dirname(vosk_model), exist_ok=True)
         if not os.path.isdir(vosk_model):
             # since the model does not exist, download the default to the
             # standard path and unzip it
-            cmd = [
-                'curl',
-                '-o',
-                f'"{vosk_model}.zip"',
-                'https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip'
-            ]
-            completedprocess = run_command(cmd)
+            source = f"https://alphacephei.com/vosk/models/{default_model}.zip"
+            dest = f"{vosk_model}.zip"
+            app_utils.download_file(
+                source,
+                dest
+            )
             cmd = [
                 'unzip',
-                f'"{vosk_model}.zip"'
+                dest,
+                '-d', os.path.dirname(vosk_model)
             ]
             completedprocess = run_command(cmd)
         return OrderedDict(
