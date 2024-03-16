@@ -18,7 +18,7 @@ This plugin allows [Naomi](https://projectnaomi.com/) to use [VOSK](https://alph
 to convert speech to text. This plugin does not currently do language model
 adaptation automatically, but it is already very good, at least in English, so
 it may not be necessary for you to adapt the language model if it already knows
-of the words it needs.
+all the words needed.
 
 Instructions for adapting the language model are at https://alphacephei.com/vosk/lm
 but I'll also summarize them here:
@@ -29,7 +29,7 @@ but I'll also summarize them here:
   - English - https://alphacephei.com/vosk/models/vosk-model-en-us-0.22-compile.zip
   - French - https://alphacephei.com/vosk/models/vosk-model-fr-0.6-linto-2.2.0-compile.zip
   - German - https://alphacephei.com/vosk/models/vosk-model-de-0.21-compile.zip
-4. Unzip the file and update path.sh to point to KALDI_ROOT (if kaldi is installed in your home directory, ie. ~/kaldi, then path.sh should be correct already).
+4. Unzip the archive and update path.sh to point to KALDI_ROOT (if kaldi is installed in your home directory, ie. ~/kaldi, then path.sh should be correct already). The folder you unzip the archive to will be referred to as $VOSK_COMPILE below.
 5. Copy your extra.txt file from ~/.config/naomi/vocabularies/&lt;locale&gt;/VOSK STT/&lt;vocabulary&gt;/extra.txt
 to $VOSK_COMPILE/db/extra.txt.
 6. Activate your Naomi virtual environment by running `workon Naomi`.
@@ -50,10 +50,12 @@ active_stt:
 ```
 
 This plugin will download and unzip an appropriate model based on your selected
-language to ~/.config/naomi/vosk. If it discovers that any of the words your
-Naomi needs to be able to understand are not included in the
+language/locale to ~/.config/naomi/vosk.
+
 ```
 VOSK STT:
-  model: /home/naomi/.config/naomi/vosk/vosk-model-small-en-us-0.15
+  model: /home/naomi/.config/naomi/vosk/vosk-model-en-us-0.22
 ```
+
+Special thanks to @Akul2010 for submitting an early version of this plugin.
 <EditPageLink/>
