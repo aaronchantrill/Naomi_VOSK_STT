@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import json
+import logging
 import os.path
-import sys
 from collections import OrderedDict
 from naomi import app_utils
 from naomi import paths
@@ -41,34 +41,44 @@ class VoskSTTPlugin(plugin.STTPlugin):
 
         Arguments:
         """
+        self.logger = logging.getLogger(__name__)
+
         plugin.STTPlugin.__init__(self, *args, **kwargs)
+        self.compile_vocabulary(
+            voskvocab.compile_vocabulary
+        )
         vosk_model = profile.get(
             ['VOSK STT', 'model'],
-            os.path.join(
-                paths.sub('vosk'),
-                'vosk-model-small-en-us-0.15'
-            )
+            self.get_default_model()
         )
-        model = Model(vosk_model, lang="en-us")
+        model = Model(
+            vosk_model,
+            lang=profile.get(['language'], 'en-US').lower()
+        )
         self.rec = KaldiRecognizer(model, 16000)
-        scorer_file = os.path.join(
-            self.compile_vocabulary(
-                self.generate_scorer
-            ), "scorer"
-        )
-        print(f'Vosk scorer file: {scorer_file}')
 
+    @staticmethod
+    def get_default_model():
+        """
+        Returns the default model based on language
+        """
+        language = profile.get(['language'], 'en-US')
+        default_model = 'vosk-model-en-us-0.22'
+        if language == "fr-FR":
+            default_model = 'vosk-model-fr-0.22'
+        elif language == "de-DE":
+            default_model = 'vosk-model-de-0.21'
+        return default_model
 
     def settings(self):
-        default_model='vosk-model-small-en-us-0.15'
         vosk_model = profile.get(
             ['VOSK STT', 'model'],
             os.path.join(
                 paths.sub('vosk'),
-                default_model
+                self.get_default_model()
             )
         )
-        default_model=os.path.basename(vosk_model)
+        default_model = os.path.basename(vosk_model)
         if not os.path.isdir(os.path.dirname(vosk_model)):
             os.makedirs(os.path.dirname(vosk_model), exist_ok=True)
         if not os.path.isdir(vosk_model):
@@ -86,6 +96,10 @@ class VoskSTTPlugin(plugin.STTPlugin):
                 '-d', os.path.dirname(vosk_model)
             ]
             completedprocess = run_command(cmd)
+            if completedprocess.returncode == 0:
+                self.logger.info(process_completedprocess(completedprocess))
+            else:
+                self.logger.error(process_completedprocess(completedprocess))
         return OrderedDict(
             [
                 (
@@ -100,17 +114,6 @@ class VoskSTTPlugin(plugin.STTPlugin):
             ]
         )
 
-    def generate_scorer(self, directory, phrases):
-        languagemodel_path = get_languagemodel_path(directory)
-        with open(languagemodel_path, "w") as f:
-            f.writelines(line_generator(phrases))
-        # Generate a list of unique words in phrases,
-        # then use that list to generate a dictionary
-        # with phonetisaurus
-        
-        
-        return os.path.join(directory, 'scorer')
-
     def transcribe(self, fp):
         """
         Performs STT, transcribing an audio file and returning the result.
@@ -121,9 +124,8 @@ class VoskSTTPlugin(plugin.STTPlugin):
         fp.seek(44)
         data = fp.read()
 
-        if(len(data) == 0):
-            self._logger.warn(f"File {wave_file} is empty")
-            return ""
+        if len(data) == 0:
+            return []
         self.rec.AcceptWaveform(data)
         res = json.loads(self.rec.Result())
         result = res['text']

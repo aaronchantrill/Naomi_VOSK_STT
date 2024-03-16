@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 import os
 import logging
-import tempfile
-try:
-    import cmuclmtk
-except ImportError:
-    pass
-from .g2p import PhonetisaurusG2P
+from naomi.coloredformatting import naomidefaults
+from naomi import i18n
+from naomi import paths
 from naomi import profile
+from naomi import visualizations
+
+
+_ = i18n.GettextMixin(i18n.parse_translations(paths.data('locale'))).gettext
 
 
 def delete_temp_file(file_to_delete):
@@ -15,12 +16,12 @@ def delete_temp_file(file_to_delete):
         os.remove(file_to_delete)
 
 
-def get_languagemodel_path(path):
+def get_corpus_path(path):
     """
     Returns:
         The path of the the pocketsphinx languagemodel file as string
     """
-    return os.path.join(path, 'languagemodel')
+    return os.path.join(path, 'extra.txt')
 
 
 def get_dictionary_path(path):
@@ -28,66 +29,89 @@ def get_dictionary_path(path):
     Returns:
         The path of the pocketsphinx dictionary file as string
     """
-    return os.path.join(path, 'dictionary')
+    return os.path.join(path, 'extra.dic')
 
 
 def compile_vocabulary(directory, phrases):
     """
-    Compiles the vocabulary to the Pocketsphinx format by creating a
-    languagemodel and a dictionary.
+    Right now, this just writes the phrases to an extra.txt file, then checks
+    for any words that are missing from $VOSK_MODEL/graph/words.txt. It
+    creates an extra.txt file that can then be used with the compiler to
+    generate a new HCLG.fst file. If any words are missing from the current
+    vocabulary, the revision file is removed.
 
     Arguments:
         phrases -- a list of phrases that this vocabulary will contain
     """
     logger = logging.getLogger(__name__)
-    languagemodel_path = get_languagemodel_path(directory)
-    dictionary_path = get_dictionary_path(directory)
+    corpus_path = get_corpus_path(directory)
 
-    executable = profile.get(
-        ['pocketsphinx', 'phonetisaurus_executable'],
-        'phonetisaurus-g2p'
+    vosk_model = profile.get(
+        ['VOSK STT', 'model']
     )
-    nbest = profile.get(
-        ['pocketsphinx', 'nbest'],
-        3
-    )
-    fst_model = profile.get(['pocketsphinx', 'fst_model'])
-    fst_model_alphabet = profile.get(
-        ['pocketsphinx', 'fst_model_alphabet'],
-        'arpabet'
-    )
+    word_list = os.path.join(vosk_model, 'graph', 'words.txt')
 
-    if not fst_model:
-        raise ValueError('FST model not specified!')
-
-    if not os.path.exists(fst_model):
-        raise OSError('FST model {} does not exist!'.format(fst_model))
-
-    g2pconverter = PhonetisaurusG2P(
-        executable,
-        fst_model,
-        fst_model_alphabet=fst_model_alphabet,
-        nbest=nbest
-    )
-
-    logger.debug('Languagemodel path: %s' % languagemodel_path)
-    logger.debug('Dictionary path:    %s' % dictionary_path)
-    text = " ".join(
-        [("<s> %s </s>" % phrase.upper()) for phrase in phrases]
-    )
-    # There's some strange issue when text2idngram sometime can't find any
-    # input (although it's there). For a reason beyond me, this can be fixed
-    # by appending a space char to the string.
-    text += ' '
-    logger.debug('Compiling languagemodel...')
-    vocabulary = compile_languagemodel(text, languagemodel_path)
+    logger.debug('corpus path: %s' % corpus_path)
+    logger.debug('Compiling corpus...')
+    vocabulary = compile_languagemodel(phrases, corpus_path)
     logger.debug('Starting dictionary...')
-    compile_dictionary(g2pconverter, vocabulary, dictionary_path)
+    # check vocabulary to make sure all words appear in the VOSK words.txt
+    missing = set()
+    with open(word_list, 'r') as f:
+        for word in sorted(vocabulary):
+            line = f.readline().split()[0].lower()
+            while line < word:
+                line = f.readline().split()[0].lower()
+            if line != word:
+                missing.add(word)
+    if len(missing):
+        # Remove the revision file
+        warn(
+            _(
+                "The VOSK dictionary is missing the following words: {}"
+            ).format(missing)
+        )
+        logger.warn(
+            _("You can use the {} file to generate a custom language model using the directions at https://alphacephei.com/vosk/lm").format(corpus_path)
+        )
+        # Is this plugin being used as the default stt engine?
+        if os.path.basename(directory) == "default":
+            # Check if "verify_wakeword" is enabled
+            if profile.get_arg("verify_wakeword", False):
+                # Check if any of the missing words are used as or in wakewords
+                keywords = profile.get_arg('keywords', ['Naomi'])
+                removekeywords = set()
+                for keyword in keywords:
+                    for word in missing:
+                        if word in keyword.lower():
+                            warn(
+                                _("Because the missing word {} is used in the keyword {}, either {} cannot be used as a keyword or verify_wakeword needs to be disabled since the active stt engine would never recognize it.").format(word, keyword, keyword)
+                            )
+                            warn(
+                                _("Removing {} from keywords.").format(keyword)
+                            )
+                            removekeywords.add(keyword)
+                if len(removekeywords):
+                    # Remove the revision file
+                    os.remove(os.path.join(directory, 'revision'))
+                    for keyword in removekeywords:
+                        keywords.remove(keyword)
+                    if len(keywords) == 0:
+                        warn(
+                            _("Removing the keywords left no keywords. Restoring keywords and switching off the verify_wakeword option")
+                        )
+                        profile.set_arg("verify_wakeword", False)
+                    else:
+                        warn(
+                            _("You may use the keywords {}").format(keywords)
+                        )
+                        profile.set_arg("keywords", keywords)
 
 
-def compile_languagemodel(text, output_file):
+def compile_languagemodel(phrases, output_file):
     """
-    Compiles the languagemodel from a text.
+    Creates a corpus file (extra.txt) which can be used to train a new model
+    using the Vosk _compile.zip model for the language.
 
     Arguments:
         text -- the text the languagemodel will be generated from
@@ -97,76 +121,32 @@ def compile_languagemodel(text, output_file):
     Returns:
         A list of all unique words this vocabulary contains.
     """
-    if len(text.strip()) == 0:
+    if len(" ".join(phrases).strip()) == 0:
         raise ValueError('No text to compile into languagemodel!')
 
     logger = logging.getLogger(__name__)
 
-    with tempfile.NamedTemporaryFile(suffix='.vocab', delete=False) as f:
-        vocab_file = f.name
-
-    # Create vocab file from text
-    logger.debug("Creating vocab file: '%s'" % vocab_file)
-    cmuclmtk.text2vocab(text, vocab_file)
-
     # Get words from vocab file
-    logger.debug("Getting words from vocab file and removing it afterwards...")
-    words = []
-    with open(vocab_file, 'r') as f:
-        for line in f:
-            line = line.strip()
-            if not line.startswith('#') and line not in ('<s>', '</s>') and "{" not in line and "}" not in line:
-                words.append(line)
-
+    logger.debug("Creating languagemodel file: '%s'" % output_file)
+    words = set()
+    with open(output_file, 'w') as f:
+        for phrase in phrases:
+            f.write(f"{phrase.lower()}\n")
+            for word in phrase.split():
+                if not word.startswith('#') and word not in ('<s>', '</s>'):
+                    words.add(word.lower())
     if len(words) == 0:
         logger.warning('Vocab file seems to be empty!')
-
-    # Create language model from text
-    logger.debug("Creating languagemodel file: '%s'" % output_file)
-    cmuclmtk.text2lm(text, output_file, vocab_file=vocab_file)
-
-    # Remote the vocab file
-    delete_temp_file(vocab_file)
 
     return words
 
 
-def compile_dictionary(g2pconverter, words, output_file):
-    """
-    Compiles the dictionary from a list of words.
-
-    Arguments:
-        words -- a list of all unique words this vocabulary contains
-        output_file -- the path of the file this dictionary will
-                       be written to
-    """
-    # create the dictionary
-    logger = logging.getLogger(__name__)
-    logger.debug("Getting phonemes for %d words..." % len(words))
-    try:
-        phonemes = g2pconverter.translate([word.upper() for word in words])
-        logger.debug(phonemes)
-    except ValueError as e:
-        print(str(e))
-        if str(e) == 'Input symbol not found':
-            logger.debug("Upper failed trying lower()")
-            phonemes = g2pconverter.translate([word.lower() for word in words])
-        else:
-            raise e
-
-    logger.debug("Creating dict file: '%s'" % output_file)
-    with open(output_file, "w") as f:
-        for word, pronounciations in phonemes.items():
-            for i, pronounciation in enumerate(pronounciations, start=1):
-                if i == 1:
-                    line = "%s\t%s\n" % (
-                        word.upper(),
-                        pronounciation
-                    )
-                else:
-                    line = "%s(%d)\t%s\n" % (
-                        word.upper(),
-                        i,
-                        pronounciation
-                    )
-                f.write(line)
+def warn(message, logger=None):
+    if not logger:
+        logger = logging.getLogger(__name__)
+    logger.warn(message)
+    visualizations.run_visualization(
+        "output",
+        f"{naomidefaults.B_R}{message}{naomidefaults.sto}",
+        timestamp=False
+    )
