@@ -57,5 +57,5 @@ VOSK STT:
   model: /home/naomi/.config/naomi/vosk/vosk-model-en-us-0.22
 ```
 
-Special thanks to @Akul2010 for submitting an early version of this plugin.
+Special thanks to [@Akul2010](https://github.com/Akul2010) for submitting an early version of this plugin.
 <EditPageLink/>
