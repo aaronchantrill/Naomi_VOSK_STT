@@ -32,6 +32,32 @@ def get_dictionary_path(path):
     return os.path.join(path, 'extra.dic')
 
 
+def get_verify_keyword():
+    return profile.get_arg(
+        "verify_keyword",
+        profile.get_arg(
+            "verify_wakeword",
+            profile.get(
+                "verify_wakeword",
+                False
+            )
+        )
+    )
+
+
+def get_keywords():
+    keywords = profile.get_arg(
+        'keywords',
+        profile.get(
+            ['keyword'],
+            ['Naomi']
+        )
+    )
+    if isinstance(keywords, str):
+        keywords = [keywords]
+    return keywords
+
+
 def compile_vocabulary(directory, phrases):
     """
     Right now, this just writes the phrases to an extra.txt file, then checks
@@ -71,21 +97,22 @@ def compile_vocabulary(directory, phrases):
                 "The VOSK dictionary is missing the following words: {}"
             ).format(missing)
         )
-        logger.warn(
+        warn(
             _("You can use the {} file to generate a custom language model using the directions at https://alphacephei.com/vosk/lm").format(corpus_path)
         )
         # Is this plugin being used as the default stt engine?
         if os.path.basename(directory) == "default":
-            # Check if "verify_wakeword" is enabled
-            if profile.get_arg("verify_wakeword", False):
+            # Check if "verify_keyword" is enabled
+            verify_keyword = get_verify_keyword()
+            if profile.get_arg("verify_keyword", False):
                 # Check if any of the missing words are used as or in wakewords
-                keywords = profile.get_arg('keywords', ['Naomi'])
+                keywords = get_keywords()
                 removekeywords = set()
                 for keyword in keywords:
                     for word in missing:
                         if word in keyword.lower():
                             warn(
-                                _("Because the missing word {} is used in the keyword {}, either {} cannot be used as a keyword or verify_wakeword needs to be disabled since the active stt engine would never recognize it.").format(word, keyword, keyword)
+                                _("Because the missing word {} is used in the keyword {}, either {} cannot be used as a keyword or verify_keyword needs to be disabled since the active stt engine would never recognize it.").format(word, keyword, keyword)
                             )
                             warn(
                                 _("Removing {} from keywords.").format(keyword)
@@ -98,9 +125,9 @@ def compile_vocabulary(directory, phrases):
                         keywords.remove(keyword)
                     if len(keywords) == 0:
                         warn(
-                            _("Removing the keywords left no keywords. Restoring keywords and switching off the verify_wakeword option")
+                            _("Removing the keywords left no keywords. Restoring keywords and switching off the verify_keyword option")
                         )
-                        profile.set_arg("verify_wakeword", False)
+                        profile.set_arg("verify_keyword", False)
                     else:
                         warn(
                             _("You may use the keywords {}").format(keywords)
