@@ -37,8 +37,8 @@ def get_verify_keyword():
         "verify_keyword",
         profile.get_arg(
             "verify_wakeword",
-            profile.get(
-                "verify_wakeword",
+            profile.get_profile_flag(
+                ['passive_stt', 'verify_wakeword'],
                 False
             )
         )
