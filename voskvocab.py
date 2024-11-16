@@ -52,7 +52,7 @@ def get_keywords():
             ['keyword'],
             ['Naomi']
         )
-    )
+    ).copy()
     if isinstance(keywords, str):
         keywords = [keywords]
     return keywords
@@ -127,6 +127,7 @@ def compile_vocabulary(directory, phrases):
                         warn(
                             _("Removing the keywords left no keywords. Restoring keywords and switching off the verify_keyword option")
                         )
+                        profile.set_arg("keywords", get_keywords())
                         profile.set_arg("verify_keyword", False)
                     else:
                         warn(
